@@ -295,7 +295,7 @@ function LayerCard({layer,active,onClick}){return <div onClick={onClick} classNa
   </div>}
 </div>;}
 
-/* ═══ SEISMIC TAB (abbreviated – same logic, bigger text) ═══ */
+/* ═══ SEISMIC TAB ═══ */
 function SeismicTab({onComplete}){
   const[step,setStep]=useState(0);const[pR,setPR]=useState(0);const[sR,setSR]=useState(0);const[sB,setSB]=useState(false);const[pLoop,setPLoop]=useState(false);const[sLoop,setSLoop]=useState(false);const[tick,setTick]=useState(0);
   const aRef=useRef(null);const lRef=useRef(null);
@@ -370,7 +370,6 @@ function SeismicTab({onComplete}){
           </g>;})()}
         </svg>
       </div>}
-      {/* Key takeaway note */}
       <div className="card" style={{padding:14,marginTop:10,borderColor:"rgba(245,166,35,.3)",background:"rgba(245,166,35,.05)"}}>
         <div className="noto" style={{fontSize:14,color:"rgba(255,255,255,.8)",lineHeight:1.7,textAlign:"center"}}>
           📌 우리는 <strong style={{color:"var(--accent)"}}>간접 분석 방법</strong>으로 <strong style={{color:"var(--accent)"}}>지진파 분석법</strong>이 있다는 것만 알면 됩니다!
@@ -383,12 +382,74 @@ function SeismicTab({onComplete}){
 /* ═══ COMPARE ═══ */
 function CompareView(){return <div style={{animation:"fadeUp .4s"}}><div className="bhans" style={{fontSize:20,color:"var(--text)",textAlign:"center",marginBottom:16}}>🏔️ 대륙 지각 vs 🌊 해양 지각</div><div style={{display:"flex",gap:12,marginBottom:14}}>{[{l:"대륙 지각",e:"🏔️",t:"~35 km",d:"2.7 g/cm³",col:"#B5845A"},{l:"해양 지각",e:"🌊",t:"~5 km",d:"3.0 g/cm³",col:"#2A7FA0"}].map(x=><div key={x.l} className="card" style={{flex:1,padding:14,borderColor:`${x.col}44`}}><div style={{textAlign:"center",marginBottom:10}}><span style={{fontSize:30}}>{x.e}</span><div className="noto" style={{fontWeight:800,color:x.col,fontSize:14,marginTop:4}}>{x.l}</div></div>{[{k:"평균 두께",v:x.t},{k:"밀도",v:x.d}].map(({k,v})=><div key={k} style={{background:"rgba(0,0,0,.25)",borderRadius:8,padding:"6px 10px",marginBottom:5}}><div style={{color:x.col,fontSize:10,fontWeight:700}}>{k}</div><div className="fira" style={{color:"var(--text)",fontSize:12}}>{v}</div></div>)}</div>)}</div><div className="card" style={{padding:14}}><div className="noto" style={{fontSize:11,color:"var(--dim)",textAlign:"center",marginBottom:8,fontWeight:600}}>두께 비교 (실제 비율)</div><div style={{display:"flex",gap:6}}><div style={{flex:7,height:30,background:"linear-gradient(90deg,#B5845A,#D4A87C)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}><span className="fira" style={{fontSize:12,color:"white",fontWeight:700}}>35 km</span></div><div style={{flex:1,height:30,background:"linear-gradient(90deg,#2A7FA0,#4AAFC0)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}><span className="fira" style={{fontSize:10,color:"white",fontWeight:700}}>5</span></div></div></div></div>;}
 
-/* ═══ QUIZ ═══ */
-function Quiz({onComplete}){const qs=useMemo(()=>[...QUIZ_QS].sort(()=>Math.random()-.5).slice(0,7),[]);const[ci,setCi]=useState(0);const[sel,setSel]=useState(null);const[done,setDone]=useState(false);const[score,setScore]=useState(0);const[fin,setFin]=useState(false);
-  const pick=i=>{if(done)return;setSel(i);setDone(true);if(i===qs[ci].a){setScore(s=>s+1);SFX.correct();}else SFX.wrong();};
-  const next=()=>{SFX.click();if(ci+1>=qs.length){setFin(true);if(score+(sel===qs[ci].a?1:0)===qs.length){onComplete("quiz-perfect");SFX.achievement();}}else{setCi(c=>c+1);setSel(null);setDone(false);}};
-  if(fin){const fs=score;return <div style={{textAlign:"center",padding:16,animation:"fadeUp .4s"}}><div style={{fontSize:64,marginBottom:10}}>{fs===7?"🏆":fs>=5?"👏":"📚"}</div><div className="bhans" style={{fontSize:28,color:"var(--accent)"}}>{fs}/{qs.length}</div><div className="noto" style={{color:"var(--dim)",fontSize:15}}>{fs===7?"완벽!":fs>=5?"잘했어요!":"다시 도전!"}</div></div>;}
-  const q=qs[ci];return <div style={{animation:"fadeUp .35s"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><span className="fira" style={{color:"var(--dim)",fontSize:12}}>{ci+1}/{qs.length}</span><div style={{display:"flex",gap:5}}>{qs.map((_,i)=><div key={i} style={{width:10,height:10,borderRadius:5,background:i<ci?"var(--accent)":i===ci?"white":"rgba(255,255,255,.15)"}}/>)}</div><span className="fira" style={{color:"var(--accent)",fontSize:12}}>점수:{score}</span></div><div className="noto" style={{fontSize:15,fontWeight:700,color:"var(--text)",marginBottom:14,lineHeight:1.7}}>{q.q}</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{q.o.map((o,i)=>{let bg="rgba(255,255,255,.03)",bd="var(--border)",col="var(--text)";if(done){if(i===q.a){bg="rgba(46,204,113,.12)";bd="#2ECC71";col="#2ECC71";}else if(i===sel){bg="rgba(231,76,60,.12)";bd="#E74C3C";col="#E74C3C";}}return <button key={i} className="btn" onClick={()=>pick(i)} style={{padding:"11px 16px",borderRadius:10,textAlign:"left",border:`1.5px solid ${bd}`,background:bg,color:col,fontSize:14,fontWeight:600}}>{o}</button>;})}</div>{done&&<button className="btn" onClick={next} style={{marginTop:12,width:"100%",padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{ci+1>=qs.length?"결과 🎉":"다음 →"}</button>}</div>;}
+/* ═══ QUIZ — 버그 수정 버전 ═══ */
+function Quiz({onComplete}){
+  const qs=useMemo(()=>[...QUIZ_QS].sort(()=>Math.random()-.5).slice(0,7),[]);
+  const[ci,setCi]=useState(0);
+  const[sel,setSel]=useState(null);
+  const[done,setDone]=useState(false);
+  const[score,setScore]=useState(0);
+  const[fin,setFin]=useState(false);
+  // ✅ 수정: finalScore를 별도 state로 관리 (React state 비동기 문제 해결)
+  const[finalScore,setFinalScore]=useState(0);
+
+  const pick=i=>{
+    if(done)return;
+    setSel(i);
+    setDone(true);
+    if(i===qs[ci].a){setScore(s=>s+1);SFX.correct();}
+    else SFX.wrong();
+  };
+
+  const next=()=>{
+    SFX.click();
+    if(ci+1>=qs.length){
+      // ✅ 수정: score state 대신 직접 계산한 fs 사용 (클로저 stale 문제 방지)
+      const isCorrect = sel===qs[ci].a;
+      const fs = score + (isCorrect ? 1 : 0);
+      setFinalScore(fs);
+      setFin(true);
+      if(fs===qs.length){
+        onComplete("quiz-perfect");
+        SFX.achievement();
+      }
+    } else {
+      setCi(c=>c+1);
+      setSel(null);
+      setDone(false);
+    }
+  };
+
+  // ✅ 수정: fin 화면에서 finalScore 사용 (score가 아님)
+  if(fin){
+    return <div style={{textAlign:"center",padding:16,animation:"fadeUp .4s"}}>
+      <div style={{fontSize:64,marginBottom:10}}>{finalScore===7?"🏆":finalScore>=5?"👏":"📚"}</div>
+      <div className="bhans" style={{fontSize:28,color:"var(--accent)"}}>{finalScore}/{qs.length}</div>
+      <div className="noto" style={{color:"var(--dim)",fontSize:15}}>{finalScore===7?"완벽!":finalScore>=5?"잘했어요!":"다시 도전!"}</div>
+    </div>;
+  }
+
+  const q=qs[ci];
+  return <div style={{animation:"fadeUp .35s"}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+      <span className="fira" style={{color:"var(--dim)",fontSize:12}}>{ci+1}/{qs.length}</span>
+      <div style={{display:"flex",gap:5}}>{qs.map((_,i)=><div key={i} style={{width:10,height:10,borderRadius:5,background:i<ci?"var(--accent)":i===ci?"white":"rgba(255,255,255,.15)"}}/>)}</div>
+      <span className="fira" style={{color:"var(--accent)",fontSize:12}}>점수:{score}</span>
+    </div>
+    <div className="noto" style={{fontSize:15,fontWeight:700,color:"var(--text)",marginBottom:14,lineHeight:1.7}}>{q.q}</div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {q.o.map((o,i)=>{
+        let bg="rgba(255,255,255,.03)",bd="var(--border)",col="var(--text)";
+        if(done){
+          if(i===q.a){bg="rgba(46,204,113,.12)";bd="#2ECC71";col="#2ECC71";}
+          else if(i===sel){bg="rgba(231,76,60,.12)";bd="#E74C3C";col="#E74C3C";}
+        }
+        return <button key={i} className="btn" onClick={()=>pick(i)} style={{padding:"11px 16px",borderRadius:10,textAlign:"left",border:`1.5px solid ${bd}`,background:bg,color:col,fontSize:14,fontWeight:600}}>{o}</button>;
+      })}
+    </div>
+    {done&&<button className="btn" onClick={next} style={{marginTop:12,width:"100%",padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{ci+1>=qs.length?"결과 🎉":"다음 →"}</button>}
+  </div>;
+}
 
 /* ═══ ASSEMBLY ═══ */
 function Assembly({onComplete}){const ord=["crust","mantle","outer-core","inner-core"];const[pcs,setPcs]=useState(()=>LAYERS.map(l=>({id:l.id,name:l.name,emoji:l.emoji,color:l.color,colorLight:l.colorLight})).sort(()=>Math.random()-.5));const[placed,setPlaced]=useState([]);const[wrong,setWrong]=useState(false);const[ok,setOk]=useState(false);
@@ -439,7 +500,7 @@ function VolcanicTab(){
   </div>;
 }
 
-/* ═══ EXPLORATION NOTE (separate tab) ═══ */
+/* ═══ EXPLORATION NOTE ═══ */
 function ExplorationNote({onComplete}){
   const[answers,setAnswers]=useState({});const[showR,setShowR]=useState({});
   const allDone=Object.keys(answers).length===NOTE_QS.length;
@@ -459,9 +520,8 @@ function ExplorationNote({onComplete}){
   </div>;
 }
 
-/* ═══ DETECTIVE (과학 탐정) ═══ */
+/* ═══ DETECTIVE ═══ */
 function Detective({onComplete}){const[rnd,setRnd]=useState(0);const[ci,setCi]=useState(0);const[res,setRes]=useState(null);const[score,setScore]=useState(0);
-  // 6 rounds: 4 unique layers + 2 repeats with reversed clue order
   const[ord]=useState(()=>{
     const s=[...LAYERS].sort(()=>Math.random()-.5);
     const extra=s.slice(0,2).map(l=>({...l,clues:[...l.clues].reverse()})).sort(()=>Math.random()-.5);
@@ -529,10 +589,8 @@ function App(){
         dRef.current=Math.min(dRef.current+speed*9,DRILL_MAX);
         setDepth(dRef.current);
         const cl=getLayerAt(dRef.current);setAL(cl.id);
-        // Layer change sound
         if(prevLayerRef.current&&prevLayerRef.current!==cl.id){SFX.layerEnter();}
         prevLayerRef.current=cl.id;
-        // Drill sound every ~500ms
         if(Math.random()<0.08)SFX.drill();
         DEPTH_FACTS.forEach(f=>{if(dRef.current>=f.depth&&!sRef.current.has(f.depth)){sRef.current.add(f.depth);showNotif(f.text);}});
         if(dRef.current>=DRILL_MAX){unlock("earth-explorer");setDrilling(false);setShaking(false);clearInterval(iRef.current);}
@@ -570,13 +628,11 @@ function App(){
     <style>{CSS}</style><RotatePrompt/>
     <InfoModal show={showInfo} onClose={()=>setShowInfo(false)}/>
 
-    {/* Header */}
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:4,marginBottom:8,position:"relative"}}>
       <h1 className="bhans" style={{fontSize:20,color:"var(--accent)",margin:0}}>🌍 지구 탐험대</h1>
       <button className="btn" onClick={()=>{SFX.click();setShowInfo(true);}} style={{position:"absolute",right:4,top:4,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",color:"var(--dim)",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>ℹ️</button>
     </div>
 
-    {/* Tabs */}
     <div style={{display:"flex",gap:4,marginBottom:10,justifyContent:"center",overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
       {tabs.map(t=><button key={t.id} className="btn noto" onClick={()=>{SFX.click();setTab(t.id);}} style={{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,border:tab===t.id?"2px solid rgba(245,166,35,.5)":"1px solid var(--border)",background:tab===t.id?"rgba(245,166,35,.1)":"transparent",color:tab===t.id?"var(--accent)":"var(--dim)"}}>{t.icon} {t.l}</button>)}
     </div>
@@ -584,7 +640,6 @@ function App(){
     <div style={{maxWidth:960,margin:"0 auto"}}>
       {tab==="explore"&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}}>
         <div style={{flex:"1 1 260px",display:"flex",flexDirection:"column",alignItems:"center"}}>
-          {/* Concept banner */}
           <div className="card" style={{padding:12,marginBottom:10,width:"100%",maxWidth:300,borderColor:"rgba(245,166,35,.2)",background:"rgba(245,166,35,.04)"}}>
             <div className="noto" style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.7,textAlign:"center"}}>
               <strong style={{color:"var(--accent)"}}>⛏️ 시추법</strong> — 직접 땅을 파서 조사하는 방법<br/>
@@ -593,7 +648,6 @@ function App(){
             </div>
           </div>
           <EarthSVG activeLayer={aL} onLayerClick={id=>{SFX.click();setAL(aL===id?null:id);}} drillDepth={depth} shaking={shaking} compact/>
-          {/* Notifications appear BELOW the SVG */}
           <NotifBar msg={notif}/>
           {achBanner&&<div style={{textAlign:"center",padding:"8px 20px",margin:"4px auto",background:"linear-gradient(135deg,rgba(15,22,40,.95),rgba(26,32,64,.95))",border:"2px solid var(--accent)",borderRadius:14,animation:"slideDown .4s",display:"flex",alignItems:"center",gap:10,maxWidth:360}}>
             <span style={{fontSize:28}}>{achBanner.icon}</span>
