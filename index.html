@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌍 지구 탐험대 — 지권의 층상 구조</title>
+  <meta name="description" content="지구 내부의 층상 구조를 재미있게 학습하는 인터랙티브 웹앱 - 과학이조선생">
+  <meta name="author" content="조승재(과학이조선생)">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <style>
+    html, body, #root { margin: 0; padding: 0; min-height: 100vh; background: #070B14; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+
+/* ═══ SOUND ENGINE ═══ */
+const SFX = {
+  _ready: false,
+  async init() {
+    if (this._ready) return;
+    await Tone.start();
+    this._ready = true;
+  },
+  drill() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "sawtooth" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.1 }, volume: -20 }).toDestination();
+    s.triggerAttackRelease("C2", "16n");
+  },
+  layerEnter() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.05, decay: 0.3, sustain: 0, release: 0.3 }, volume: -12 }).toDestination();
+    s.triggerAttackRelease("G4", "8n");
+    setTimeout(() => { const s2 = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.05, decay: 0.3, sustain: 0, release: 0.3 }, volume: -12 }).toDestination(); s2.triggerAttackRelease("C5", "8n"); }, 150);
+  },
+  achievement() {
+    if (!this._ready) return;
+    const notes = ["C5", "E5", "G5", "C6"];
+    notes.forEach((n, i) => {
+      setTimeout(() => { const s = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.02, decay: 0.4, sustain: 0, release: 0.5 }, volume: -8 }).toDestination(); s.triggerAttackRelease(n, "8n"); }, i * 120);
+    });
+  },
+  correct() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "triangle" }, volume: -10 }).toDestination();
+    s.triggerAttackRelease("E5", "16n");
+    setTimeout(() => { const s2 = new Tone.Synth({ oscillator: { type: "triangle" }, volume: -10 }).toDestination(); s2.triggerAttackRelease("G5", "16n"); }, 100);
+  },
+  wrong() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "square" }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }, volume: -18 }).toDestination();
+    s.triggerAttackRelease("D3", "8n");
+  },
+  click() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.005, decay: 0.08, sustain: 0, release: 0.05 }, volume: -16 }).toDestination();
+    s.triggerAttackRelease("A4", "32n");
+  },
+  wave() {
+    if (!this._ready) return;
+    const s = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.3, decay: 1, sustain: 0, release: 1 }, volume: -14 }).toDestination();
+    s.triggerAttackRelease("E3", "2n");
+  },
+  capture() {
+    if (!this._ready) return;
+    ["C5","E5","G5","C6","E6"].forEach((n,i) => {
+      setTimeout(() => { const s = new Tone.Synth({ oscillator: { type: "triangle" }, volume: -8 }).toDestination(); s.triggerAttackRelease(n, "8n"); }, i * 100);
+    });
+  }
+};
+
+/* ═══ DATA ═══ */
+const DRILL_MAX = 6400;
+const EARTH_R = 6371;
+
+const LAYERS = [
+  { id:"crust",name:"지각",nameEn:"Crust",emoji:"🏔️",depthStart:0,depthEnd:35,color:"#B5845A",colorLight:"#D4A87C",state:"고체",composition:"여러 가지 암석",density:"2.7~3.0",temp:"~20–500°C",desc:"지구의 겉 부분으로 가장 얇은 층입니다. 고체 상태이며 여러 가지 암석으로 이루어져 있고, 대륙 지각(평균 ~35km)과 해양 지각(평균 ~5km)으로 구분됩니다.",fact:"대륙 지각(~35km)은 해양 지각(~5km)보다 7배 두꺼워요!",clues:["지구에서 가장 얇은 층이에요","고체 상태의 여러 가지 암석으로 이루어져 있어요","우리가 살고 있는 곳이에요","대륙 지각과 해양 지각으로 구분해요","해양 지각의 평균 두께는 약 5km예요"]},
+  { id:"mantle",name:"맨틀",nameEn:"Mantle",emoji:"🔥",depthStart:35,depthEnd:2900,color:"#C94A2E",colorLight:"#E8734F",state:"고체",composition:"감람석·휘석",density:"3.3~5.5",temp:"500–4,000°C",desc:"깊이 약 2,900km까지의 층으로 지구 전체 부피의 약 80%를 차지합니다. 고체 상태이며 지각보다 밀도가 높은 물질로 이루어져 있습니다.",fact:"지구 부피의 80%! 아주 느린 대류가 일어나요.",clues:["지구 전체 부피의 약 80%를 차지해요","고체이지만 지각보다 밀도가 높아요","깊이 약 2,900km까지의 층이에요","지각 바로 아래에 위치해요","이 층에서 아주 느린 대류가 일어나요"]},
+  { id:"outer-core",name:"외핵",nameEn:"Outer Core",emoji:"💧",depthStart:2900,depthEnd:5100,color:"#E8930F",colorLight:"#FFC04D",state:"액체 (추정)",composition:"철·니켈",density:"9.9~12.2",temp:"4,000–5,000°C",desc:"깊이 약 2,900~5,100km의 층이며 액체 상태로 추정합니다. S파(횡파)가 통과하지 못하는 것이 핵심 근거입니다.",fact:"액체 상태의 철! 지구 자기장의 비밀이 여기에.",clues:["유일하게 액체 상태로 추정되는 층이에요","S파(횡파)가 이 층을 통과하지 못해요","지구 자기장을 만드는 원인이에요","철과 니켈로 이루어져 있어요","깊이 약 2,900~5,100km에 위치해요"]},
+  { id:"inner-core",name:"내핵",nameEn:"Inner Core",emoji:"☀️",depthStart:5100,depthEnd:6371,color:"#FFD700",colorLight:"#FFE766",state:"고체 (추정)",composition:"철·니켈",density:"12.8~13.1",temp:"~6,000°C",desc:"깊이 약 5,100km에서 지구 중심까지의 층입니다. 온도가 약 6,000°C로 태양 표면과 비슷하지만, 압력이 330~360 GPa로 극도로 높아 물질이 꾹꾹 눌려 고체 상태로 존재한다고 추정합니다.",fact:"태양 표면 온도인데도 압력이 너무 높아서 고체!",clues:["지구의 가장 중심에 있는 층이에요","온도가 ~6,000°C인데도 고체로 추정돼요","엄청난 압력(330~360 GPa)이 물질을 꾹꾹 눌러요","철과 니켈로 이루어져 있어요","외핵과 같은 물질이지만 상태가 달라요"]},
+];
+
+const QUIZ_QS = [
+  {q:"지구 전체 부피의 약 80%를 차지하는 층은?",o:["지각","맨틀","외핵","내핵"],a:1},
+  {q:"액체 상태로 추정되는 층은?",o:["지각","맨틀","외핵","내핵"],a:2},
+  {q:"대륙 지각의 평균 두께는?",o:["약 5km","약 35km","약 100km","약 2900km"],a:1},
+  {q:"지구 내부를 간접적으로 조사하는 데 이용하는 것은?",o:["빛","소리","지진파","전파"],a:2},
+  {q:"해양 지각의 평균 두께는?",o:["약 5km","약 15km","약 35km","약 50km"],a:0},
+  {q:"외핵과 내핵의 주요 물질은?",o:["화강암","현무암","감람석","철과 니켈"],a:3},
+  {q:"내핵의 상태는?",o:["기체","액체","고체(추정)","플라스마"],a:2},
+  {q:"맨틀은 깊이 약 몇 km까지의 층인가?",o:["100km","1000km","2900km","5100km"],a:2},
+  {q:"S파가 통과하지 못하는 층은?",o:["지각","맨틀","외핵","내핵"],a:2},
+  {q:"외핵이 액체임을 알 수 있는 근거는?",o:["온도 측정","S파 미도달","색깔 관찰","소리 분석"],a:1},
+  {q:"땅속 시추나 화산 분출 물질 분석의 한계는?",o:["비용이 비쌈","지구 내부 전체를 알기 어려움","위험함","시간이 오래 걸림"],a:1},
+  {q:"지구 내부가 층상 구조임을 알아낸 방법은?",o:["직접 시추","화산 관찰","지진파 분석","위성 촬영"],a:2},
+  {q:"내핵이 높은 온도에서도 고체인 이유는?",o:["온도가 낮아서","압력이 극도로 높아서","밀도가 낮아서","자기장 때문에"],a:1},
+  {q:"외핵·내핵은 지각·맨틀에 비해?",o:["밀도가 낮다","밀도가 높다","온도가 낮다","부피가 크다"],a:1},
+  {q:"지각을 이루는 두 종류는?",o:["상부·하부","대륙 지각·해양 지각","고체·액체","암석·금속"],a:1},
+  {q:"P파(종파)의 특징은?",o:["고체만 통과","액체만 통과","고체와 액체 모두 통과","통과 불가"],a:2},
+  {q:"지구에서 가장 얇은 층은?",o:["맨틀","외핵","내핵","지각"],a:3},
+  {q:"외핵이 시작되는 깊이는 약?",o:["35km","660km","2,900km","5,100km"],a:2},
+  {q:"내핵이 시작되는 깊이는 약?",o:["2,900km","3,500km","5,100km","6,371km"],a:2},
+  {q:"깊이 약 35km 경계면 아래에 있는 층은?",o:["지각","맨틀","외핵","내핵"],a:1},
+  {q:"깊이가 깊어질수록 밀도는?",o:["낮아진다","변화 없다","높아진다","불규칙하다"],a:2},
+  {q:"깊이가 깊어질수록 온도는?",o:["낮아진다","높아진다","변화 없다","알 수 없다"],a:1},
+];
+
+const DEPTH_FACTS = [
+  {depth:3.8,text:"🏊 마리아나 해구 최심부!"},{depth:8.8,text:"🏔️ 에베레스트산 높이만큼!"},
+  {depth:12.3,text:"⛏️ 인류 최고 시추 깊이(12km) 돌파!"},{depth:40,text:"🪨 지각을 뚫었어요!"},
+  {depth:410,text:"💎 다이아몬드가 만들어지는 깊이!"},{depth:2900,text:"💧 외핵 진입! 액체 영역!"},
+  {depth:5100,text:"☀️ 내핵 진입! 고체 철·니켈!"},{depth:6371,text:"🌍 지구 중심 도달!"},
+  {depth:6400,text:"🎉 시추 완료! 지구 중심을 관통했습니다!"},
+];
+
+const NOTE_QS = [
+  {q:"깊이가 깊어질수록 온도는 어떻게 변하나요?",o:["낮아진다","변화 없다","높아진다","불규칙하다"],a:2,icon:"🌡️"},
+  {q:"깊이가 깊어질수록 밀도는 어떻게 변하나요?",o:["낮아진다","높아진다","변화 없다","가벼워진다"],a:1,icon:"⚖️"},
+  {q:"깊이가 깊어질수록 압력은 어떻게 변하나요?",o:["낮아진다","변화 없다","불규칙하다","높아진다"],a:3,icon:"💎"},
+  {q:"지구에서 부피가 가장 큰 층은?",o:["지각","맨틀","외핵","내핵"],a:1,icon:"🔥"},
+  {q:"내핵이 약 6,000°C에서도 고체인 이유는?",o:["온도가 낮아서","자기장 때문","극도로 높은 압력","밀도가 낮아서"],a:2,icon:"☀️"},
+  {q:"지구 내부 전체를 알아낸 간접적 방법은?",o:["직접 시추","화산 분석","지진파 분석","위성 관측"],a:2,icon:"🌊"},
+];
+
+const ACHIEVEMENTS = [
+  {id:"earth-explorer",icon:"🌏",name:"지구 탐험대",desc:"시추법으로 지구 중심까지 도달!"},
+  {id:"note-clear",icon:"📓",name:"탐험 노트 완성",desc:"탐험 노트 모든 질문에 정답!"},
+  {id:"quiz-perfect",icon:"🏆",name:"만점 박사",desc:"퀴즈에서 만점!"},
+  {id:"assembly-clear",icon:"🧩",name:"조립 마스터",desc:"지구 조립 완성!"},
+  {id:"detective-clear",icon:"🔬",name:"과학 탐정",desc:"과학 탐정 모드 클리어!"},
+  {id:"seismic-clear",icon:"🌊",name:"지진파 박사",desc:"지진파 추론 완료!"},
+];
+
+/* ═══ CSS ═══ */
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800;900&family=Black+Han+Sans&family=Fira+Code:wght@400;600&display=swap');
+:root{--bg:#070B14;--card:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.06);--text:rgba(255,255,255,0.9);--dim:rgba(255,255,255,0.45);--accent:#F5A623;--accent2:#FF6B35;}
+*{box-sizing:border-box;margin:0;padding:0;}body{background:var(--bg);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px rgba(245,166,35,.3)}50%{box-shadow:0 0 24px rgba(245,166,35,.6)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-2px)}75%{transform:translateX(2px)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes popIn{0%{opacity:0;transform:scale(.5)}60%{transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
+@keyframes drillBit{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.noto{font-family:'Noto Sans KR',sans-serif}.fira{font-family:'Fira Code',monospace}.bhans{font-family:'Black Han Sans',sans-serif}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px}
+.btn{border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-weight:700;transition:all .2s}.btn:active{transform:scale(.96)}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}
+`;
+
+/* ═══ UTILS ═══ */
+const getLayerAt=d=>LAYERS.find(l=>d>=l.depthStart&&d<l.depthEnd)||LAYERS[3];
+const lerp=(a,b,t)=>a+(b-a)*t;
+const getTempAt=d=>{if(d<35)return lerp(20,500,d/35);if(d<2900)return lerp(500,4000,(d-35)/2865);if(d<5100)return lerp(4000,5000,(d-2900)/2200);return lerp(5000,6000,(d-5100)/1271);};
+const getPressAt=d=>{if(d<35)return lerp(0,1,d/35);if(d<2900)return lerp(1,136,(d-35)/2865);if(d<5100)return lerp(136,330,(d-2900)/2200);return lerp(330,360,(d-5100)/1271);};
+const getDensAt=d=>{if(d<35)return lerp(2.7,3,d/35);if(d<2900)return lerp(3.3,5.5,(d-35)/2865);if(d<5100)return lerp(9.9,12.2,(d-2900)/2200);return lerp(12.8,13.1,(d-5100)/1271);};
+
+const SVG_R=170;const LR={"inner-core":1271*(SVG_R/EARTH_R),"outer-core":(EARTH_R-2900)*(SVG_R/EARTH_R),"mantle":(EARTH_R-35)*(SVG_R/EARTH_R),"crust":SVG_R};
+
+/* ═══ FIXED FOOTER ═══ */
+function Footer(){return <div className="noto" style={{textAlign:"center",padding:"16px 12px 10px",fontSize:10,color:"rgba(255,255,255,.25)",lineHeight:1.8,letterSpacing:.3}}>
+  <div>제작자: <span style={{color:"rgba(255,255,255,.4)"}}>조승재(과학이조선생)</span> · 배포일자: 2026.03.06</div>
+  <div>이메일: <a href="mailto:chuseonjae@outlook.kr" style={{color:"rgba(245,166,35,.4)",textDecoration:"none"}}>chuseonjae@outlook.kr</a></div>
+  <div style={{marginTop:2}}>© 과학이조선생 · All rights reserved</div>
+</div>;}
+
+/* ═══ INFO MODAL ═══ */
+function InfoModal({show,onClose}){
+  if(!show)return null;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1500,backdropFilter:"blur(4px)"}} onClick={onClose}>
+    <div className="card" style={{maxWidth:400,width:"90%",padding:"28px 24px",animation:"popIn .35s ease",borderColor:"var(--accent)",background:"linear-gradient(135deg,#0D1220,#141830)"}} onClick={e=>e.stopPropagation()}>
+      <div style={{textAlign:"center",marginBottom:16}}>
+        <div style={{fontSize:48,marginBottom:8}}>🌍</div>
+        <div className="bhans" style={{fontSize:22,color:"var(--accent)"}}>지구 탐험대</div>
+        <div className="noto" style={{fontSize:12,color:"var(--dim)",marginTop:4}}>지권의 층상 구조 학습 웹앱</div>
+      </div>
+      <div className="noto" style={{fontSize:13,color:"rgba(255,255,255,.7)",lineHeight:1.8,marginBottom:16}}>
+        이 웹앱은 중학교 과학 '지권의 층상 구조' 단원을 재미있게 학습할 수 있도록 제작되었습니다.
+        <br/><br/>
+        <strong style={{color:"var(--accent)"}}>⛏️ 시추법</strong> — 가상 드릴로 지구 내부를 탐험<br/>
+        <strong style={{color:"var(--accent)"}}>🌋 화산 분출물</strong> — 직접 분석법 학습<br/>
+        <strong style={{color:"var(--accent)"}}>🌊 지진파 분석법</strong> — 간접 분석법 시뮬레이션<br/>
+        <strong style={{color:"var(--accent)"}}>📓 탐험노트</strong> — 관찰 기반 문제 풀기<br/>
+        <strong style={{color:"var(--accent)"}}>🧩 조립 / 🔬 과학탐정 / 📝 퀴즈</strong> — 게임형 평가
+        <br/><br/>
+        모든 업적을 달성하면 인증서를 캡처할 수 있습니다!
+      </div>
+      <div style={{borderTop:"1px solid var(--border)",paddingTop:12,marginBottom:12}}>
+        <div className="noto" style={{fontSize:11,color:"var(--dim)",lineHeight:1.7}}>
+          <div>제작자: <span style={{color:"rgba(255,255,255,.6)"}}>조승재(과학이조선생)</span></div>
+          <div>이메일: <span style={{color:"rgba(245,166,35,.6)"}}>chuseonjae@outlook.kr</span></div>
+          <div>배포일자: <span style={{color:"rgba(255,255,255,.5)"}}>2026.03.06</span></div>
+        </div>
+      </div>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,var(--accent),var(--accent2))",color:"white",fontSize:14}}>닫기</button>
+    </div>
+  </div>;
+}
+
+/* ═══ ROTATE PROMPT ═══ */
+function RotatePrompt(){const[d,setD]=useState(false);const[p,setP]=useState(false);
+  useEffect(()=>{const c=()=>setP(window.innerHeight>window.innerWidth*1.1);c();window.addEventListener("resize",c);return()=>window.removeEventListener("resize",c);},[]);
+  if(d||!p)return null;
+  return <div style={{position:"fixed",inset:0,background:"rgba(7,11,20,.95)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20}}>
+    <div style={{fontSize:72,animation:"spin 2s linear infinite"}}>📱</div>
+    <div className="bhans" style={{fontSize:24,color:"var(--accent)"}}>화면을 가로로 돌려주세요!</div>
+    <div className="noto" style={{fontSize:15,color:"var(--dim)",textAlign:"center",lineHeight:1.7}}>가로 모드에서 더 넓게 탐험할 수 있어요</div>
+    <button className="btn" onClick={()=>setD(true)} style={{marginTop:8,padding:"10px 32px",borderRadius:12,background:"rgba(255,255,255,.08)",color:"var(--dim)",fontSize:14}}>세로로 계속하기</button>
+  </div>;
+}
+
+/* ═══ NOTIFICATION BAR (below SVG, not overlapping) ═══ */
+function NotifBar({msg}){
+  if(!msg)return null;
+  return <div style={{textAlign:"center",padding:"8px 16px",margin:"8px auto",maxWidth:400,background:"rgba(245,166,35,.1)",border:"1px solid rgba(245,166,35,.3)",borderRadius:12,animation:"slideDown .3s"}}>
+    <span className="noto" style={{color:"var(--accent)",fontSize:13,fontWeight:700}}>{msg}</span>
+  </div>;
+}
+
+/* ═══ EARTH SVG ═══ */
+function EarthSVG({activeLayer,onLayerClick,drillDepth,shaking,compact}){
+  const layers=[{id:"inner-core",r:LR["inner-core"],c1:"#FFD700",c2:"#CC9900"},{id:"outer-core",r:LR["outer-core"],c1:"#F5A623",c2:"#B87A0A"},{id:"mantle",r:LR["mantle"],c1:"#C94A2E",c2:"#8A2A15"},{id:"crust",r:SVG_R,c1:"#B5845A",c2:"#7A5530"}];
+  const drillY=-SVG_R+(Math.min(drillDepth,DRILL_MAX)/EARTH_R)*SVG_R;
+  const cl=getLayerAt(drillDepth);
+  return <svg viewBox="-195 -195 390 390" style={{width:"100%",maxWidth:compact?300:380,height:"auto",animation:shaking?"shake .08s linear infinite":"none",filter:"drop-shadow(0 4px 24px rgba(245,166,35,.12))"}}>
+    <defs><radialGradient id="cG"><stop offset="0%" stopColor="#FFFBE0" stopOpacity=".7"/><stop offset="100%" stopColor="#FFD700" stopOpacity="0"/></radialGradient><clipPath id="rH"><rect x="0" y="-195" width="195" height="390"/></clipPath><clipPath id="lH"><rect x="-195" y="-195" width="195" height="390"/></clipPath></defs>
+    <g clipPath="url(#lH)"><circle r={SVG_R} fill="#1B4332"/><ellipse cx="-65" cy="-45" rx="55" ry="30" fill="#2D6A4F" opacity=".7"/><ellipse cx="-25" cy="45" rx="75" ry="24" fill="#40916C" opacity=".5"/><ellipse cx="-120" cy="18" rx="38" ry="50" fill="#1E5068" opacity=".6"/></g>
+    <g clipPath="url(#rH)">{[...layers].reverse().map(l=><circle key={l.id} r={l.r} fill={activeLayer===l.id?l.c1:l.c2} stroke={activeLayer===l.id?"#fff":"rgba(255,255,255,.08)"} strokeWidth={activeLayer===l.id?3:.5} onClick={()=>{SFX.click();onLayerClick(l.id);}} style={{cursor:"pointer",transition:"all .4s"}}/>)}<circle r={layers[0].r} fill="url(#cG)" pointerEvents="none"/></g>
+    <line x1="0" y1={-SVG_R-3} x2="0" y2={SVG_R+3} stroke="rgba(255,255,255,.1)" strokeWidth="1"/>
+    {[{d:35,l:"35"},{d:2900,l:"2,900"},{d:5100,l:"5,100"}].map(({d,l})=>{const y=-SVG_R+(d/EARTH_R)*SVG_R;return <g key={d}><line x1={SVG_R+2} y1={y} x2={SVG_R+16} y2={y} stroke="rgba(255,255,255,.25)" strokeWidth=".7" strokeDasharray="2,2"/><text x={SVG_R+19} y={y+4} fill="rgba(255,255,255,.4)" fontSize="8" className="fira">{l}km</text></g>;})}
+    {[{y:-SVG_R+10,l:"지각"},{y:-SVG_R+(1467/EARTH_R)*SVG_R,l:"맨틀"},{y:-SVG_R+(4000/EARTH_R)*SVG_R,l:"외핵"},{y:-SVG_R+(5735/EARTH_R)*SVG_R,l:"내핵"}].map(({y,l})=><text key={l} x="55" y={y} fill="rgba(255,255,255,.22)" fontSize="9" textAnchor="middle" className="noto" fontWeight="600">{l}</text>)}
+    {drillDepth>0&&<g>
+      <line x1="4" y1={-SVG_R} x2="4" y2={drillY} stroke="#C8C8C8" strokeWidth="3" strokeLinecap="round"/>
+      <g transform={`translate(4,${drillY})`} style={{animation:"drillBit .08s linear infinite"}}><polygon points="-6,-3 6,-3 0,10" fill={cl.color}/><circle r="2.5" cy="-1" fill="white" opacity=".9"/></g>
+      {drillDepth<DRILL_MAX&&[0,1,2].map(i=><circle key={i} cx={4+Math.sin(i*2.5)*9} cy={drillY} r={1.3} fill={cl.colorLight} opacity=".8"><animate attributeName="opacity" from=".9" to="0" dur=".35s" repeatCount="indefinite" begin={`${i*.1}s`}/><animate attributeName="cy" from={drillY} to={drillY-14} dur=".4s" repeatCount="indefinite" begin={`${i*.1}s`}/></circle>)}
+      {drillDepth>=DRILL_MAX&&<g transform={`translate(4,${drillY})`} style={{animation:"popIn .4s"}}><line x1="-10" y1="16" x2="10" y2="16" stroke="#2ECC71" strokeWidth="3" strokeLinecap="round"/><text x="0" y="30" fill="#2ECC71" fontSize="8" textAnchor="middle" className="noto" fontWeight="800">시추 완료!</text></g>}
+      <text x="18" y={drillY+4} fill={cl.colorLight} fontSize="8" className="fira" opacity=".8">{Math.round(drillDepth)}km</text>
+    </g>}
+  </svg>;
+}
+
+/* ═══ GAUGE ═══ */
+function Gauge({label,value,max,unit,color,icon}){const pct=Math.min((value/max)*100,100);return <div style={{flex:1,minWidth:0}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span className="noto" style={{fontSize:11,color:"var(--dim)",fontWeight:600}}>{icon} {label}</span><span className="fira" style={{fontSize:12,color,fontWeight:600}}>{value>100?Math.round(value).toLocaleString():value.toFixed(1)}{unit}</span></div><div style={{height:7,background:"rgba(0,0,0,.4)",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:`linear-gradient(90deg,${color}88,${color})`,borderRadius:4,transition:"width .15s linear"}}/></div></div>;}
+
+/* ═══ DRILL PANEL ═══ */
+function DrillPanel({depth,drilling,speed,onStart,onStop,onReset,onSpeed}){
+  const layer=getLayerAt(depth);const pct=(depth/DRILL_MAX)*100;
+  return <div className="card" style={{padding:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <span className="noto" style={{fontWeight:800,color:"var(--text)",fontSize:15}}>⛏️ 드릴 시뮬레이터</span>
+      <span className="fira" style={{color:"var(--accent)",fontSize:14,fontWeight:600}}>{Math.round(depth).toLocaleString()} / {DRILL_MAX.toLocaleString()} km</span>
+    </div>
+    <div style={{position:"relative",height:28,background:"rgba(0,0,0,.45)",borderRadius:14,overflow:"hidden",marginBottom:12}}>
+      <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:`linear-gradient(90deg,${layer.color}AA,${layer.color})`,borderRadius:14,transition:"width .1s linear"}}/>
+      {[35,2900,5100].map(d=><div key={d} style={{position:"absolute",top:0,bottom:0,left:`${(d/DRILL_MAX)*100}%`,width:1,background:"rgba(255,255,255,.2)"}}/>)}
+      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span className="noto" style={{fontSize:11,color:"white",fontWeight:700,textShadow:"0 1px 3px rgba(0,0,0,.6)"}}>{layer.emoji} {layer.name}</span></div>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:12}}>
+      <Gauge label="온도" value={getTempAt(depth)} max={5000} unit="°C" color="#FF4444" icon="🌡️"/>
+      <Gauge label="압력" value={getPressAt(depth)} max={330} unit=" GPa" color="#4488FF" icon="💎"/>
+      <Gauge label="밀도" value={getDensAt(depth)} max={12.2} unit="" color="#44DD88" icon="⚖️"/>
+    </div>
+    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      {depth>=DRILL_MAX?<button className="btn" onClick={()=>{SFX.click();onReset();}} style={{flex:1,padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,#27AE60,#2ECC71)",color:"white",fontSize:14}}>🔄 처음부터</button>
+      :<button className="btn" onClick={()=>{SFX.click();drilling?onStop():onStart();}} style={{flex:1,padding:"10px 0",borderRadius:10,background:drilling?"linear-gradient(135deg,#E74C3C,#C0392B)":"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{drilling?"⏸ 정지":"▶ 시작!"}</button>}
+      <div style={{display:"flex",gap:3}}>
+        {[0.5,1,3,8,20].map(s=><button key={s} className="btn" onClick={()=>{SFX.click();onSpeed(s);}} style={{width:36,height:32,borderRadius:8,fontSize:10,border:speed===s?"2px solid var(--accent)":"1px solid var(--border)",background:speed===s?"rgba(245,166,35,.15)":"rgba(0,0,0,.2)",color:speed===s?"var(--accent)":"var(--dim)"}}>{s}x</button>)}
+      </div>
+    </div>
+  </div>;
+}
+
+/* ═══ LAYER CARD ═══ */
+function LayerCard({layer,active,onClick}){return <div onClick={onClick} className="card" style={{padding:"12px 14px",cursor:"pointer",transition:"all .35s",borderColor:active?layer.color:"var(--border)",background:active?`linear-gradient(135deg,${layer.color}11,${layer.color}28)`:"var(--card)",boxShadow:active?`0 4px 20px ${layer.color}22`:"none"}}>
+  <div style={{display:"flex",alignItems:"center",gap:10}}>
+    <span style={{fontSize:24}}>{layer.emoji}</span>
+    <div style={{flex:1}}><div className="noto" style={{fontWeight:700,fontSize:14,color:active?layer.colorLight:"var(--dim)"}}>{layer.name}</div><div className="fira" style={{fontSize:10,color:"rgba(255,255,255,.25)"}}>{layer.depthStart.toLocaleString()}–{layer.depthEnd.toLocaleString()} km</div></div>
+    <div style={{fontSize:18,color:"var(--dim)",transition:"transform .3s",transform:active?"rotate(90deg)":"rotate(0)"}}>›</div>
+  </div>
+  {active&&<div style={{marginTop:12,animation:"fadeUp .35s"}}>
+    <p className="noto" style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.8,marginBottom:12}}>{layer.desc}</p>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+      {[{k:"상태",v:layer.state},{k:"구성",v:layer.composition},{k:"밀도",v:layer.density+" g/cm³"},{k:"온도",v:layer.temp}].map(({k,v})=><div key={k} style={{background:"rgba(0,0,0,.3)",borderRadius:10,padding:"7px 11px"}}><div style={{color:layer.colorLight,fontSize:9,fontWeight:700,marginBottom:2}}>{k}</div><div className="fira" style={{color:"rgba(255,255,255,.85)",fontSize:12}}>{v}</div></div>)}
+    </div>
+    <div style={{marginTop:10,padding:"8px 12px",background:`${layer.color}14`,borderRadius:10,borderLeft:`3px solid ${layer.color}`}}><span className="noto" style={{fontSize:12,color:"rgba(255,255,255,.7)"}}>💡 {layer.fact}</span></div>
+  </div>}
+</div>;}
+
+/* ═══ SEISMIC TAB (abbreviated – same logic, bigger text) ═══ */
+function SeismicTab({onComplete}){
+  const[step,setStep]=useState(0);const[pR,setPR]=useState(0);const[sR,setSR]=useState(0);const[sB,setSB]=useState(false);const[pLoop,setPLoop]=useState(false);const[sLoop,setSLoop]=useState(false);const[tick,setTick]=useState(0);
+  const aRef=useRef(null);const lRef=useRef(null);
+  const ocR=LR["outer-core"],icR=LR["inner-core"],mR=LR["mantle"];
+  const EX=-100,EY=-130;
+  const STEPS=[
+    {t:"지진파 분석법이란?",b:"지진이 발생하면 그 지점(**진원**: 지각 내부에서 지진이 시작된 곳)에서 **P파(종파)**와 **S파(횡파)** 두 종류의 지진파가 퍼져나갑니다. 과학자들은 이 파동을 관측하여 지구 내부 구조를 **간접적으로** 알아냈습니다.",h:"start"},
+    {t:"P파 (종파) 발사!",b:"P파는 **고체와 액체 모두** 통과합니다. **파란색 파동**이 지구 전체를 뚫고 지나갑니다!",h:"p"},
+    {t:"S파 (횡파) 발사!",b:"S파는 **고체만** 통과합니다. 외핵에 도달하면? **빨간색 파동**을 관찰하세요!",h:"s"},
+    {t:"🔍 S파가 사라졌다!",b:"S파가 외핵에서 **완전히 차단**! 액체를 통과할 수 없기 때문이죠. 외핵이 **액체**라는 핵심 근거!",h:"sb"},
+    {t:"외핵: 액체 철·니켈",b:"P파 속도 분석 → 외핵은 **철과 니켈**로 이루어져 있고, 액체 상태의 철 대류가 **지구 자기장**을 만듭니다!",h:"oc"},
+    {t:"내핵은 왜 고체?",b:"P파가 내핵에서 **속도가 급증**합니다. 같은 철·니켈이지만 **330~360 GPa의 극한 압력**이 물질을 꾹꾹 눌러 ~6,000°C에서도 **고체**!",h:"ic"},
+    {t:"🎉 추론 완료!",b:"• S파 차단 → 외핵 **액체**\n• P파 분석 → **철·니켈**\n• 극한 압력 → 내핵 **고체**\n\n직접 갈 수 없는 지구 내부를 간접적으로 밝혀냈습니다!",h:"done"},
+  ];
+  const stop=()=>{if(aRef.current)clearInterval(aRef.current);if(lRef.current)clearInterval(lRef.current);setPLoop(false);setSLoop(false);};
+  useEffect(()=>{stop();
+    if(step===1){setPR(0);setSR(0);setSB(false);SFX.wave();let r=0;aRef.current=setInterval(()=>{r+=3;setPR(r);if(r>SVG_R*2.2){clearInterval(aRef.current);setPLoop(true);let t=0;lRef.current=setInterval(()=>{t++;setTick(t);},60);}},25);}
+    else if(step===2){setSR(0);setSB(false);SFX.wave();let r=0;aRef.current=setInterval(()=>{r+=2.5;if(r>=ocR+5){setSB(true);SFX.wrong();clearInterval(aRef.current);setSR(ocR);setSLoop(true);let t=0;lRef.current=setInterval(()=>{t++;setTick(t);},60);return;}setSR(r);},25);}
+    else if(step>=3){setSB(true);setSR(ocR);}
+    return stop;
+  },[step]);
+  useEffect(()=>{if(step===STEPS.length-1){onComplete("seismic-clear");SFX.achievement();}},[step,onComplete]);
+
+  const cur=STEPS[step];
+  const fmt=t=>{const p=t.split(/(\*\*[^*]+\*\*)/g);return p.map((x,i)=>{if(x.startsWith("**")&&x.endsWith("**"))return <strong key={i} style={{color:"var(--accent)",fontWeight:800}}>{x.slice(2,-2)}</strong>;if(x.includes("\n"))return x.split("\n").map((l,j)=><span key={`${i}-${j}`}>{l}{j<x.split("\n").length-1&&<br/>}</span>);return x;});};
+  const pWaves=()=>{if(step<1)return null;const rings=[];if(pLoop){for(let i=0;i<6;i++){const br=((tick*3+i*55)%(SVG_R*2.5));if(br<5||br>SVG_R*2.2)continue;const op=Math.max(0,.85-br/(SVG_R*2));rings.push(<circle key={`pl${i}`} cx={EX} cy={EY} r={br} fill="none" stroke="#4499FF" strokeWidth={5+(1-br/(SVG_R*2))*4} opacity={op} strokeDasharray="8,5"/>);}}else if(pR>0){for(let i=0;i<5;i++){const r=pR-i*40;if(r<=0||r>SVG_R*2.2)continue;const op=Math.max(0,.9-r/(SVG_R*2));rings.push(<circle key={`p${i}`} cx={EX} cy={EY} r={r} fill="none" stroke="#4499FF" strokeWidth={6+(1-r/(SVG_R*2))*5} opacity={op} strokeDasharray="8,5"/>);}}return <g>{rings}</g>;};
+  const sWaves=()=>{if(step<2)return null;const rings=[];if(sLoop&&step<=3){for(let i=0;i<5;i++){const br=((tick*2.5+i*45)%(ocR+20));if(br<5)continue;const cr=Math.min(br,ocR);const op=Math.max(0,.9-cr/(ocR+10));rings.push(<circle key={`sl${i}`} cx={EX} cy={EY} r={cr} fill="none" stroke="#FF4455" strokeWidth={5+(1-cr/ocR)*5} opacity={op}/>);}}else if(sR>0){for(let i=0;i<4;i++){const r=Math.min(sR-i*35,ocR);if(r<=0)continue;const op=Math.max(0,.9-r/(ocR+10));rings.push(<circle key={`s${i}`} cx={EX} cy={EY} r={r} fill="none" stroke="#FF4455" strokeWidth={6+(1-r/ocR)*5} opacity={op}/>);}}return <g>{rings}</g>;};
+  const blocked=()=>{if(!sB&&step<3)return null;return <g>{[20,55,90,125,160].map((a,i)=>{const rad=a*Math.PI/180;const bx=EX+Math.cos(rad)*ocR;const by=EY+Math.sin(rad)*ocR;if(bx*bx+by*by>SVG_R*SVG_R*1.05)return null;return <g key={a} transform={`translate(${bx},${by})`} style={{animation:`popIn .3s ease ${i*.05}s both`}}><circle r="8" fill="#FF4455" opacity=".2"/><line x1="-5" y1="-5" x2="5" y2="5" stroke="#FF4455" strokeWidth="3" strokeLinecap="round"/><line x1="5" y1="-5" x2="-5" y2="5" stroke="#FF4455" strokeWidth="3" strokeLinecap="round"/></g>;})}</g>;};
+  const getF=id=>{const b={crust:"#7A5530",mantle:"#8A2A15","outer-core":"#B87A0A","inner-core":"#CC9900"};const br2={crust:"#9A7550",mantle:"#A84A25","outer-core":"#D89A1A","inner-core":"#DDAA00"};if(cur.h==="oc"&&id==="outer-core")return br2[id];if(cur.h==="ic"&&id==="inner-core")return br2[id];return b[id];};
+  const getSW=id=>{if((cur.h==="sb"||cur.h==="oc")&&id==="outer-core")return 4;if(cur.h==="ic"&&id==="inner-core")return 4;return 1.5;};
+  const getSC=id=>{if(cur.h==="sb"&&id==="outer-core")return"#FF5555";if(cur.h==="oc"&&id==="outer-core")return"#FFD060";if(cur.h==="ic"&&id==="inner-core")return"#FFE880";return"rgba(255,255,255,.12)";};
+
+  return <div style={{display:"flex",gap:14,animation:"fadeUp .4s",flexWrap:"wrap",alignItems:"flex-start"}}>
+    <div style={{flex:"1 1 280px",display:"flex",justifyContent:"center"}}>
+      <svg viewBox="-200 -200 400 400" style={{width:"100%",maxWidth:360,height:"auto"}}>
+        <defs><radialGradient id="cg2"><stop offset="0%" stopColor="#FFFBE0" stopOpacity=".6"/><stop offset="100%" stopColor="#FFD700" stopOpacity="0"/></radialGradient><clipPath id="ec"><circle r={SVG_R}/></clipPath></defs>
+        <g clipPath="url(#ec)"><circle r={SVG_R} fill={getF("crust")} stroke={getSC("crust")} strokeWidth={getSW("crust")} style={{transition:"all .5s"}}/><circle r={mR} fill={getF("mantle")} stroke={getSC("mantle")} strokeWidth={getSW("mantle")} style={{transition:"all .5s"}}/><circle r={ocR} fill={getF("outer-core")} stroke={getSC("outer-core")} strokeWidth={getSW("outer-core")} style={{transition:"all .5s"}}/><circle r={icR} fill={getF("inner-core")} stroke={getSC("inner-core")} strokeWidth={getSW("inner-core")} style={{transition:"all .5s"}}/><circle r={icR} fill="url(#cg2)" pointerEvents="none"/>{pWaves()}{sWaves()}{blocked()}</g>
+        <text x="55" y={-SVG_R+16} fill="rgba(255,255,255,.4)" fontSize="10" textAnchor="middle" className="noto" fontWeight="700">지각</text>
+        <text x="55" y={-ocR-6} fill="rgba(255,255,255,.35)" fontSize="10" textAnchor="middle" className="noto" fontWeight="700">맨틀</text>
+        <text x="50" y={-icR-5} fill="rgba(255,255,255,.35)" fontSize="10" textAnchor="middle" className="noto" fontWeight="700">외핵</text>
+        <text x="0" y="5" fill="rgba(255,255,255,.35)" fontSize="10" textAnchor="middle" className="noto" fontWeight="700">내핵</text>
+        <circle cx={EX} cy={EY} r="7" fill="#FF3333" opacity=".9"><animate attributeName="r" values="5;11;5" dur=".8s" repeatCount="indefinite"/></circle><circle cx={EX} cy={EY} r="3.5" fill="#FFAAAA"/>
+        <text x={EX} y={EY-16} fill="#FF6666" fontSize="10" textAnchor="middle" className="noto" fontWeight="800">⚡ 진원</text>
+        <g><rect x={EX-54} y={EY-32} width="108" height="14" rx="4" fill="rgba(10,14,20,.8)"/><text x={EX} y={EY-22} fill="rgba(255,255,255,.6)" fontSize="7" textAnchor="middle" className="noto">지진이 발생한 지점 (지각 내부)</text></g>
+        {step>=1&&(pLoop||pR>SVG_R*1.5)&&<g style={{animation:"fadeIn .5s"}}><rect x={SVG_R-86} y={SVG_R-20} width="80" height="20" rx="6" fill="rgba(10,14,20,.8)"/><text x={SVG_R-46} y={SVG_R-6} fill="#4499FF" fontSize="11" className="noto" fontWeight="800" textAnchor="middle">P파 도달! ✓</text></g>}
+        {(step>=3||sB)&&<g style={{animation:"popIn .4s"}}><rect x={ocR-12} y={-18} width="84" height="26" rx="7" fill="rgba(10,14,20,.85)" stroke="#FF4455" strokeWidth="1.5"/><text x={ocR+30} y={0} fill="#FF5566" fontSize="11" className="noto" fontWeight="800" textAnchor="middle">S파 차단! ✕</text></g>}
+        {cur.h==="oc"&&<g style={{animation:"fadeUp .5s"}}><rect x="-64" y={-icR-40} width="128" height="32" rx="8" fill="rgba(10,14,20,.85)" stroke="#FFC04D" strokeWidth="1.5"/><text x="0" y={-icR-26} fill="#FFC04D" fontSize="10" textAnchor="middle" className="noto" fontWeight="800">⚡ P파 속도 감소 → 액체!</text><text x="0" y={-icR-14} fill="#FFD86B" fontSize="9" textAnchor="middle" className="fira">(철·니켈)</text></g>}
+        {cur.h==="ic"&&<g style={{animation:"fadeUp .5s"}}><rect x="-74" y="2" width="148" height="40" rx="8" fill="rgba(10,14,20,.85)" stroke="#FFE766" strokeWidth="1.5"/><text x="0" y="18" fill="#FFE766" fontSize="10" textAnchor="middle" className="noto" fontWeight="800">⚡ P파 속도 증가 → 고체!</text><text x="0" y="34" fill="#FFE0A0" fontSize="8" textAnchor="middle" className="noto">극한 압력이 꾹꾹 눌러 고체 (철·니켈)</text></g>}
+        <g transform="translate(-190,148)"><rect width="140" height="52" rx="10" fill="rgba(0,0,0,.6)" stroke="rgba(255,255,255,.1)" strokeWidth="1"/><line x1="10" y1="17" x2="36" y2="17" stroke="#4499FF" strokeWidth="4" strokeDasharray="5,3"/><text x="42" y="21" fill="#4499FF" fontSize="10" className="noto" fontWeight="600">P파 (고체+액체)</text><line x1="10" y1="38" x2="36" y2="38" stroke="#FF4455" strokeWidth="4"/><text x="42" y="42" fill="#FF4455" fontSize="10" className="noto" fontWeight="600">S파 (고체만)</text></g>
+      </svg>
+    </div>
+    <div style={{flex:"1 1 280px",display:"flex",flexDirection:"column",gap:10}}>
+      <div className="card" style={{padding:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span className="bhans" style={{fontSize:17,color:"var(--accent)"}}>{cur.t}</span><span className="fira" style={{fontSize:11,color:"var(--dim)"}}>{step+1}/{STEPS.length}</span></div>
+        <div style={{display:"flex",gap:4,marginBottom:14}}>{STEPS.map((_,i)=><div key={i} style={{flex:1,height:4,borderRadius:2,background:i<=step?"var(--accent)":"rgba(255,255,255,.1)",transition:"background .3s"}}/>)}</div>
+        <div className="noto" style={{fontSize:14,color:"rgba(255,255,255,.85)",lineHeight:1.9,marginBottom:16}}>{fmt(cur.b)}</div>
+        <div style={{display:"flex",gap:8}}>{step>0&&<button className="btn" onClick={()=>{SFX.click();setStep(s=>s-1);}} style={{flex:1,padding:"10px 0",borderRadius:10,background:"rgba(255,255,255,.06)",color:"var(--dim)",fontSize:14}}>← 이전</button>}{step<STEPS.length-1&&<button className="btn" onClick={()=>{SFX.click();setStep(s=>s+1);}} style={{flex:2,padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{step===0?"지진파 발사! 🌊":"다음 →"}</button>}</div>
+      </div>
+      {step>=4&&<div className="card" style={{padding:14,animation:"fadeUp .4s"}}>
+        <div className="noto" style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:10,textAlign:"center"}}>📊 P파 속도 변화 (깊이별)</div>
+        <svg viewBox="0 0 320 150" style={{width:"100%",height:"auto"}}>
+          <rect width="320" height="150" fill="rgba(0,0,0,.3)" rx="8"/>
+          {(()=>{const gx=40,gw=265,gy=15,gh=100;const dx=d=>gx+(d/EARTH_R)*gw;const sy=s=>gy+gh-(s/14)*gh;const x35=dx(35),x2900=dx(2900),x5100=dx(5100);return <g>
+            <rect x={gx} y={gy} width={x35-gx} height={gh} fill="#B5845A" opacity=".15"/><rect x={x35} y={gy} width={x2900-x35} height={gh} fill="#C94A2E" opacity=".15"/><rect x={x2900} y={gy} width={x5100-x2900} height={gh} fill="#E8930F" opacity=".15"/><rect x={x5100} y={gy} width={gx+gw-x5100} height={gh} fill="#FFD700" opacity=".15"/>
+            <line x1={x2900} y1={gy} x2={x2900} y2={gy+gh+4} stroke="rgba(255,255,255,.3)" strokeWidth="1" strokeDasharray="3,2"/><line x1={x5100} y1={gy} x2={x5100} y2={gy+gh+4} stroke="rgba(255,255,255,.3)" strokeWidth="1" strokeDasharray="3,2"/>
+            <text x={x2900} y={gy+gh+14} fill="#FF4455" fontSize="8" className="fira" fontWeight="700" textAnchor="middle">2,900km</text><text x={x5100} y={gy+gh+14} fill="#44DD88" fontSize="8" className="fira" fontWeight="700" textAnchor="middle">5,100km</text>
+            <text x={(x35+x2900)/2} y={gy+gh+28} fill="#C94A2E" fontSize="8" className="noto" fontWeight="700" textAnchor="middle">맨틀</text><text x={(x2900+x5100)/2} y={gy+gh+28} fill="#E8930F" fontSize="8" className="noto" fontWeight="700" textAnchor="middle">외핵</text><text x={(x5100+gx+gw)/2} y={gy+gh+28} fill="#FFD700" fontSize="8" className="noto" fontWeight="700" textAnchor="middle">내핵</text>
+            {[6,8,10,12,14].map(s=><line key={s} x1={gx} y1={sy(s)} x2={gx+gw} y2={sy(s)} stroke="rgba(255,255,255,.06)" strokeWidth=".5"/>)}
+            <polyline points={`${gx},${sy(6)} ${x35},${sy(7)} ${x35+5},${sy(8)} ${dx(660)},${sy(10)} ${dx(1400)},${sy(12)} ${dx(2200)},${sy(13)} ${dx(2800)},${sy(13.5)} ${x2900-1},${sy(13.6)} ${x2900+1},${sy(8.1)} ${dx(3400)},${sy(8.5)} ${dx(4000)},${sy(9.5)} ${dx(4800)},${sy(10.2)} ${x5100-1},${sy(10.3)} ${x5100+1},${sy(11)} ${dx(5500)},${sy(11.1)} ${gx+gw},${sy(11.3)}`} fill="none" stroke="#4499FF" strokeWidth="3" strokeLinejoin="round"/>
+            <g transform={`translate(${x2900+4},${sy(11)})`}><rect x="-2" y="-10" width="48" height="14" rx="3" fill="rgba(10,14,20,.8)"/><text x="22" y="0" fill="#FF4455" fontSize="8" className="fira" fontWeight="700" textAnchor="middle">속도 급감!</text></g>
+            <g transform={`translate(${x5100+4},${sy(10.7)})`}><rect x="-2" y="-10" width="48" height="14" rx="3" fill="rgba(10,14,20,.8)"/><text x="22" y="0" fill="#44DD88" fontSize="8" className="fira" fontWeight="700" textAnchor="middle">속도 증가!</text></g>
+          </g>;})()}
+        </svg>
+      </div>}
+      {/* Key takeaway note */}
+      <div className="card" style={{padding:14,marginTop:10,borderColor:"rgba(245,166,35,.3)",background:"rgba(245,166,35,.05)"}}>
+        <div className="noto" style={{fontSize:14,color:"rgba(255,255,255,.8)",lineHeight:1.7,textAlign:"center"}}>
+          📌 우리는 <strong style={{color:"var(--accent)"}}>간접 분석 방법</strong>으로 <strong style={{color:"var(--accent)"}}>지진파 분석법</strong>이 있다는 것만 알면 됩니다!
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+/* ═══ COMPARE ═══ */
+function CompareView(){return <div style={{animation:"fadeUp .4s"}}><div className="bhans" style={{fontSize:20,color:"var(--text)",textAlign:"center",marginBottom:16}}>🏔️ 대륙 지각 vs 🌊 해양 지각</div><div style={{display:"flex",gap:12,marginBottom:14}}>{[{l:"대륙 지각",e:"🏔️",t:"~35 km",d:"2.7 g/cm³",col:"#B5845A"},{l:"해양 지각",e:"🌊",t:"~5 km",d:"3.0 g/cm³",col:"#2A7FA0"}].map(x=><div key={x.l} className="card" style={{flex:1,padding:14,borderColor:`${x.col}44`}}><div style={{textAlign:"center",marginBottom:10}}><span style={{fontSize:30}}>{x.e}</span><div className="noto" style={{fontWeight:800,color:x.col,fontSize:14,marginTop:4}}>{x.l}</div></div>{[{k:"평균 두께",v:x.t},{k:"밀도",v:x.d}].map(({k,v})=><div key={k} style={{background:"rgba(0,0,0,.25)",borderRadius:8,padding:"6px 10px",marginBottom:5}}><div style={{color:x.col,fontSize:10,fontWeight:700}}>{k}</div><div className="fira" style={{color:"var(--text)",fontSize:12}}>{v}</div></div>)}</div>)}</div><div className="card" style={{padding:14}}><div className="noto" style={{fontSize:11,color:"var(--dim)",textAlign:"center",marginBottom:8,fontWeight:600}}>두께 비교 (실제 비율)</div><div style={{display:"flex",gap:6}}><div style={{flex:7,height:30,background:"linear-gradient(90deg,#B5845A,#D4A87C)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}><span className="fira" style={{fontSize:12,color:"white",fontWeight:700}}>35 km</span></div><div style={{flex:1,height:30,background:"linear-gradient(90deg,#2A7FA0,#4AAFC0)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}><span className="fira" style={{fontSize:10,color:"white",fontWeight:700}}>5</span></div></div></div></div>;}
+
+/* ═══ QUIZ ═══ */
+function Quiz({onComplete}){const qs=useMemo(()=>[...QUIZ_QS].sort(()=>Math.random()-.5).slice(0,7),[]);const[ci,setCi]=useState(0);const[sel,setSel]=useState(null);const[done,setDone]=useState(false);const[score,setScore]=useState(0);const[fin,setFin]=useState(false);
+  const pick=i=>{if(done)return;setSel(i);setDone(true);if(i===qs[ci].a){setScore(s=>s+1);SFX.correct();}else SFX.wrong();};
+  const next=()=>{SFX.click();if(ci+1>=qs.length){setFin(true);if(score+(sel===qs[ci].a?1:0)===qs.length){onComplete("quiz-perfect");SFX.achievement();}}else{setCi(c=>c+1);setSel(null);setDone(false);}};
+  if(fin){const fs=score;return <div style={{textAlign:"center",padding:16,animation:"fadeUp .4s"}}><div style={{fontSize:64,marginBottom:10}}>{fs===7?"🏆":fs>=5?"👏":"📚"}</div><div className="bhans" style={{fontSize:28,color:"var(--accent)"}}>{fs}/{qs.length}</div><div className="noto" style={{color:"var(--dim)",fontSize:15}}>{fs===7?"완벽!":fs>=5?"잘했어요!":"다시 도전!"}</div></div>;}
+  const q=qs[ci];return <div style={{animation:"fadeUp .35s"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><span className="fira" style={{color:"var(--dim)",fontSize:12}}>{ci+1}/{qs.length}</span><div style={{display:"flex",gap:5}}>{qs.map((_,i)=><div key={i} style={{width:10,height:10,borderRadius:5,background:i<ci?"var(--accent)":i===ci?"white":"rgba(255,255,255,.15)"}}/>)}</div><span className="fira" style={{color:"var(--accent)",fontSize:12}}>점수:{score}</span></div><div className="noto" style={{fontSize:15,fontWeight:700,color:"var(--text)",marginBottom:14,lineHeight:1.7}}>{q.q}</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{q.o.map((o,i)=>{let bg="rgba(255,255,255,.03)",bd="var(--border)",col="var(--text)";if(done){if(i===q.a){bg="rgba(46,204,113,.12)";bd="#2ECC71";col="#2ECC71";}else if(i===sel){bg="rgba(231,76,60,.12)";bd="#E74C3C";col="#E74C3C";}}return <button key={i} className="btn" onClick={()=>pick(i)} style={{padding:"11px 16px",borderRadius:10,textAlign:"left",border:`1.5px solid ${bd}`,background:bg,color:col,fontSize:14,fontWeight:600}}>{o}</button>;})}</div>{done&&<button className="btn" onClick={next} style={{marginTop:12,width:"100%",padding:"10px 0",borderRadius:10,background:"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{ci+1>=qs.length?"결과 🎉":"다음 →"}</button>}</div>;}
+
+/* ═══ ASSEMBLY ═══ */
+function Assembly({onComplete}){const ord=["crust","mantle","outer-core","inner-core"];const[pcs,setPcs]=useState(()=>LAYERS.map(l=>({id:l.id,name:l.name,emoji:l.emoji,color:l.color,colorLight:l.colorLight})).sort(()=>Math.random()-.5));const[placed,setPlaced]=useState([]);const[wrong,setWrong]=useState(false);const[ok,setOk]=useState(false);
+  const tryP=p=>{if(p.id===ord[placed.length]){SFX.correct();const np=[...placed,p];setPlaced(np);setPcs(ps=>ps.filter(x=>x.id!==p.id));setWrong(false);if(np.length===4){setOk(true);onComplete("assembly-clear");SFX.achievement();}}else{SFX.wrong();setWrong(true);setTimeout(()=>setWrong(false),800);}};
+  const reset=()=>{setPlaced([]);setOk(false);setPcs(LAYERS.map(l=>({id:l.id,name:l.name,emoji:l.emoji,color:l.color,colorLight:l.colorLight})).sort(()=>Math.random()-.5));};
+  if(ok)return <div style={{textAlign:"center",padding:20,animation:"fadeUp .4s"}}><div style={{fontSize:64,marginBottom:10}}>🎉</div><div className="bhans" style={{fontSize:24,color:"var(--accent)",marginBottom:10}}>완성!</div><button className="btn" onClick={reset} style={{padding:"8px 28px",borderRadius:10,background:"linear-gradient(135deg,var(--accent),var(--accent2))",color:"white",fontSize:14}}>다시</button></div>;
+  const tn=LAYERS.find(l=>l.id===ord[placed.length])?.name||"";
+  return <div style={{animation:"fadeUp .35s"}}><div className="noto" style={{fontSize:14,color:"var(--dim)",textAlign:"center",marginBottom:6}}>바깥→안쪽 순서로 탭하세요!</div><div className="noto" style={{fontSize:16,color:"var(--text)",textAlign:"center",marginBottom:14,fontWeight:700}}>다음: <span style={{color:"var(--accent)"}}>{tn}</span></div>
+    <div style={{display:"flex",justifyContent:"center",marginBottom:20}}><div style={{width:180,height:180,borderRadius:"50%",border:"2px dashed rgba(255,255,255,.1)",position:"relative",overflow:"hidden"}}>{placed.map((p,i)=>{const sz=[100,75,52,30];return <div key={p.id} style={{position:"absolute",width:`${sz[i]}%`,height:`${sz[i]}%`,left:`${(100-sz[i])/2}%`,top:`${(100-sz[i])/2}%`,borderRadius:"50%",background:`radial-gradient(circle at 40% 40%,${p.colorLight},${p.color})`,animation:"popIn .4s",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:sz[i]>40?20:14}}>{p.emoji}</span></div>;})}</div></div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>{pcs.map(p=><button key={p.id} className="btn" onClick={()=>tryP(p)} style={{padding:"10px 20px",borderRadius:12,background:`linear-gradient(135deg,${p.color}33,${p.color}55)`,border:`2px solid ${p.color}88`,color:p.colorLight,fontSize:14,animation:wrong?"shake .15s linear":"none"}}>{p.emoji} {p.name}</button>)}</div>
+    {wrong&&<div className="noto" style={{textAlign:"center",marginTop:10,color:"#E74C3C",fontSize:13,fontWeight:600}}>🤔 다시 생각해보세요!</div>}</div>;
+}
+
+/* ═══ VOLCANIC ANALYSIS TAB ═══ */
+function VolcanicTab(){
+  const facts=[
+    {icon:"🌋",title:"화산 분출물이란?",body:"화산이 폭발할 때 지구 내부의 물질이 지표로 나옵니다. 이 분출물(용암, 화산재, 가스 등)을 분석하면 지구 내부의 구성 물질을 알 수 있습니다."},
+    {icon:"🪨",title:"용암 분석",body:"용암은 맨틀의 일부가 녹은 마그마가 지표로 올라온 것입니다. 용암의 성분을 분석하면 맨틀이 어떤 물질로 이루어져 있는지 추정할 수 있습니다."},
+    {icon:"💎",title:"맨틀 포획암",body:"화산 폭발 시 마그마와 함께 맨틀의 암석 조각이 올라오는 경우가 있습니다. 이를 '맨틀 포획암'이라 하며, 감람석 등 맨틀의 구성 물질을 직접 확인할 수 있는 귀중한 증거입니다."},
+    {icon:"⚠️",title:"이 방법의 한계",body:"화산 분출물로 알 수 있는 것은 주로 지각과 맨틀 상부의 물질뿐입니다. 외핵이나 내핵처럼 깊은 곳의 정보는 이 방법만으로는 알기 어렵습니다. 그래서 지진파 분석과 같은 간접적인 방법이 필요합니다!"},
+  ];
+  const[step,setStep]=useState(0);
+  return <div style={{maxWidth:520,margin:"0 auto",animation:"fadeUp .4s"}}>
+    <div style={{textAlign:"center",marginBottom:16}}>
+      <span style={{fontSize:48}}>🌋</span>
+      <div className="bhans" style={{fontSize:20,color:"var(--accent)",marginTop:6}}>화산 분출물 조사법</div>
+      <div className="noto" style={{fontSize:13,color:"var(--dim)",marginTop:4}}>직접 분석법 — 화산 폭발 시 나오는 물질을 분석합니다</div>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {facts.map((f,i)=>(
+        <div key={i} className="card" style={{padding:16,cursor:"pointer",borderColor:step===i?"var(--accent)":"var(--border)",transition:"all .3s"}} onClick={()=>{SFX.click();setStep(i);}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:step===i?10:0}}>
+            <span style={{fontSize:28}}>{f.icon}</span>
+            <span className="noto" style={{fontSize:15,fontWeight:700,color:step===i?"var(--accent)":"var(--text)"}}>{f.title}</span>
+            <span style={{marginLeft:"auto",fontSize:16,color:"var(--dim)",transition:"transform .3s",transform:step===i?"rotate(90deg)":"rotate(0)"}}>›</span>
+          </div>
+          {step===i&&<div style={{animation:"fadeUp .3s"}}>
+            <p className="noto" style={{fontSize:14,color:"rgba(255,255,255,.8)",lineHeight:1.8}}>{f.body}</p>
+          </div>}
+        </div>
+      ))}
+    </div>
+    <div className="card" style={{marginTop:14,padding:14,borderColor:"rgba(245,166,35,.3)",background:"rgba(245,166,35,.05)"}}>
+      <div className="noto" style={{fontSize:13,color:"rgba(255,255,255,.7)",lineHeight:1.7,textAlign:"center"}}>
+        💡 화산 분출물 조사법은 <strong style={{color:"var(--accent)"}}>직접 분석법</strong>으로, 지각~맨틀 상부의 정보를 알 수 있지만 지구 내부 전체를 알기에는 한계가 있습니다.
+      </div>
+    </div>
+  </div>;
+}
+
+/* ═══ EXPLORATION NOTE (separate tab) ═══ */
+function ExplorationNote({onComplete}){
+  const[answers,setAnswers]=useState({});const[showR,setShowR]=useState({});
+  const allDone=Object.keys(answers).length===NOTE_QS.length;
+  const allCorrect=NOTE_QS.every((_,i)=>answers[i]===NOTE_QS[i].a);
+  useEffect(()=>{if(allDone&&allCorrect){onComplete("note-clear");SFX.achievement();}},[allDone,allCorrect,onComplete]);
+  const pick=(qi,oi)=>{if(answers[qi]!==undefined)return;SFX.click();setAnswers(p=>({...p,[qi]:oi}));setShowR(p=>({...p,[qi]:true}));if(oi===NOTE_QS[qi].a)SFX.correct();else SFX.wrong();};
+  return <div style={{maxWidth:520,margin:"0 auto",animation:"fadeUp .35s"}}>
+    <div style={{textAlign:"center",marginBottom:16}}><span style={{fontSize:36}}>📓</span><div className="bhans" style={{fontSize:20,color:"var(--accent)",marginTop:4}}>탐험 노트</div><div className="noto" style={{fontSize:13,color:"var(--dim)",marginTop:2}}>드릴 시뮬레이터를 관찰하고 답해보세요!</div></div>
+    <div className="fira" style={{textAlign:"center",fontSize:14,color:allCorrect&&allDone?"#2ECC71":"var(--accent)",marginBottom:14,fontWeight:600}}>{NOTE_QS.filter((_,i)=>answers[i]===NOTE_QS[i].a).length} / {NOTE_QS.length} 정답</div>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>{NOTE_QS.map((nq,qi)=>{const ans=answers[qi]!==undefined;const ok2=answers[qi]===nq.a;return <div key={qi} className="card" style={{padding:14,borderColor:ans?(ok2?"rgba(46,204,113,.3)":"rgba(231,76,60,.25)"):"var(--border)",transition:"all .3s"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><span style={{fontSize:22}}>{nq.icon}</span><span className="noto" style={{fontSize:14,fontWeight:700,color:"var(--text)",lineHeight:1.6,flex:1}}>{nq.q}</span>{ans&&<span style={{fontSize:18}}>{ok2?"✅":"❌"}</span>}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>{nq.o.map((opt,oi)=>{let bg="rgba(255,255,255,.03)",bd="rgba(255,255,255,.08)",col="var(--text)";if(ans){if(oi===nq.a){bg="rgba(46,204,113,.12)";bd="#2ECC71";col="#2ECC71";}else if(oi===answers[qi]){bg="rgba(231,76,60,.1)";bd="#E74C3C";col="#E74C3C";}else{col="var(--dim)";}}return <button key={oi} className="btn" onClick={()=>pick(qi,oi)} style={{padding:"9px 12px",borderRadius:10,fontSize:13,fontWeight:600,textAlign:"center",border:`1.5px solid ${bd}`,background:bg,color:col,cursor:ans?"default":"pointer"}}>{opt}</button>;})}</div>
+      {ans&&!ok2&&<div className="noto" style={{fontSize:12,color:"#E74C3C",marginTop:8,textAlign:"center"}}>정답: <span style={{color:"#2ECC71",fontWeight:700}}>{nq.o[nq.a]}</span></div>}
+    </div>;})}
+    </div>
+    {allDone&&<div style={{marginTop:14,padding:"12px 16px",borderRadius:12,textAlign:"center",background:allCorrect?"rgba(46,204,113,.1)":"rgba(231,76,60,.08)",border:`1px solid ${allCorrect?"rgba(46,204,113,.3)":"rgba(231,76,60,.2)"}`}}><span className="noto" style={{fontSize:14,fontWeight:700,color:allCorrect?"#2ECC71":"#E74C3C"}}>{allCorrect?"🎉 완벽! 탐험 노트 업적 달성!":"아쉬워요! 다시 도전해보세요."}</span></div>}
+  </div>;
+}
+
+/* ═══ DETECTIVE (과학 탐정) ═══ */
+function Detective({onComplete}){const[rnd,setRnd]=useState(0);const[ci,setCi]=useState(0);const[res,setRes]=useState(null);const[score,setScore]=useState(0);
+  // 6 rounds: 4 unique layers + 2 repeats with reversed clue order
+  const[ord]=useState(()=>{
+    const s=[...LAYERS].sort(()=>Math.random()-.5);
+    const extra=s.slice(0,2).map(l=>({...l,clues:[...l.clues].reverse()})).sort(()=>Math.random()-.5);
+    return[...s,...extra];
+  });
+  const tot=6;const cl=ord[rnd];
+  const guess=id=>{if(res!==null)return;const ok=id===cl.id;setRes(ok);if(ok){setScore(s=>s+Math.max(5-ci,1));SFX.correct();}else SFX.wrong();};
+  const next=()=>{SFX.click();if(rnd+1>=tot){onComplete("detective-clear");SFX.achievement();setRnd(tot);return;}setRnd(r=>r+1);setCi(0);setRes(null);};
+  if(rnd>=tot)return <div style={{textAlign:"center",padding:20,animation:"fadeUp .4s"}}><div style={{fontSize:64,marginBottom:10}}>🔬</div><div className="bhans" style={{fontSize:24,color:"var(--accent)",marginBottom:6}}>수사 완료!</div><div className="noto" style={{color:"var(--text)",fontSize:20,fontWeight:700}}>{score}점</div><div className="noto" style={{color:"var(--dim)",fontSize:13,marginTop:4}}>총 {tot}건 · 최대 {tot*5}점</div></div>;
+  return <div style={{animation:"fadeUp .35s",maxWidth:480,margin:"0 auto"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><span className="fira" style={{color:"var(--dim)",fontSize:12}}>사건 {rnd+1}/{tot}</span><span className="bhans" style={{fontSize:17,color:"var(--accent)"}}>🔬 과학 탐정</span><span className="fira" style={{color:"var(--accent)",fontSize:12}}>{score}점</span></div>
+    <div className="noto" style={{fontSize:16,fontWeight:700,color:"var(--text)",textAlign:"center",marginBottom:16,lineHeight:1.5}}>단서 카드를 분석하여<br/>이 층의 정체를 밝혀라!</div>
+    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>{cl.clues.slice(0,ci+1).map((c,i)=><div key={i} style={{padding:"12px 16px",borderRadius:14,animation:"fadeUp .3s",background:"linear-gradient(135deg, rgba(245,166,35,.05), rgba(245,166,35,.12))",border:"1px solid rgba(245,166,35,.25)",boxShadow:"0 2px 8px rgba(0,0,0,.15)",position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:0,right:0,background:"var(--accent)",color:"var(--bg)",fontSize:9,fontWeight:800,padding:"3px 10px 4px",borderRadius:"0 12px 0 10px",fontFamily:"'Fira Code',monospace"}}>단서 {i+1}</div>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10,paddingRight:40}}><span style={{fontSize:20,marginTop:1}}>🔎</span><span className="noto" style={{fontSize:14,color:"rgba(255,255,255,.9)",lineHeight:1.7,fontWeight:500}}>{c}</span></div>
+    </div>)}</div>
+    {ci<4&&res===null&&<button className="btn" onClick={()=>{SFX.click();setCi(c=>c+1);}} style={{width:"100%",padding:"10px 0",borderRadius:10,marginBottom:14,background:"rgba(245,166,35,.06)",border:"1.5px dashed rgba(245,166,35,.3)",color:"var(--accent)",fontSize:13}}>🃏 다음 단서 카드 열기 (현재 가치: {Math.max(5-ci-1,1)}점)</button>}
+    {res===null?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{LAYERS.map(l=><button key={l.id} className="btn" onClick={()=>guess(l.id)} style={{padding:"13px 10px",borderRadius:12,fontSize:14,background:`${l.color}15`,border:`2px solid ${l.color}55`,color:l.colorLight,boxShadow:`0 2px 10px ${l.color}15`}}>{l.emoji} {l.name}</button>)}</div>
+    :<div style={{textAlign:"center",animation:"fadeUp .3s"}}><div style={{fontSize:44,marginBottom:8}}>{res?"🎉":"😅"}</div><div className="noto" style={{fontSize:16,fontWeight:700,color:res?"#2ECC71":"#E74C3C",marginBottom:6}}>{res?`정답! +${Math.max(5-ci,1)}점`:"아쉬워요!"}</div><div className="noto" style={{fontSize:13,color:"var(--dim)",marginBottom:12}}>정답: {cl.emoji} {cl.name}</div><button className="btn" onClick={next} style={{padding:"10px 32px",borderRadius:10,background:"linear-gradient(135deg,#3498DB,#2980B9)",color:"white",fontSize:14}}>{rnd+1>=tot?"결과 보기":"다음 사건 →"}</button></div>}
+  </div>;
+}
+
+/* ═══ ACHIEVEMENTS + CAPTURE ═══ */
+function AchievementsView({unlocked}){
+  const allDone=unlocked.length===ACHIEVEMENTS.length;
+  const capture=()=>{SFX.capture();const c=document.createElement("canvas");c.width=800;c.height=440;const ctx=c.getContext("2d");
+    const g=ctx.createLinearGradient(0,0,800,440);g.addColorStop(0,"#0A0E1A");g.addColorStop(1,"#1A1A2E");ctx.fillStyle=g;ctx.beginPath();ctx.roundRect(0,0,800,440,20);ctx.fill();
+    ctx.strokeStyle="#F5A623";ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(8,8,784,424,16);ctx.stroke();
+    ctx.fillStyle="#F5A623";ctx.font="bold 28px sans-serif";ctx.textAlign="center";ctx.fillText("🌍 지구 탐험대 — 전체 업적 달성! 🏆",400,50);
+    ctx.fillStyle="rgba(255,255,255,0.5)";ctx.font="14px sans-serif";ctx.fillText("지권의 층상 구조 학습 완료 인증서",400,75);
+    const cols=2;const startY=100;const cW=350;const cH=42;
+    ACHIEVEMENTS.forEach((a,i)=>{const col=i%cols;const row=Math.floor(i/cols);const x=60+col*(cW+20);const y=startY+row*(cH+8);
+      ctx.fillStyle="rgba(255,255,255,0.04)";ctx.beginPath();ctx.roundRect(x,y,cW,cH,8);ctx.fill();ctx.strokeStyle="rgba(245,166,35,0.2)";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(x,y,cW,cH,8);ctx.stroke();
+      ctx.font="22px sans-serif";ctx.textAlign="left";ctx.fillText(a.icon,x+12,y+28);ctx.fillStyle="#F5A623";ctx.font="bold 13px sans-serif";ctx.fillText(a.name,x+44,y+19);ctx.fillStyle="rgba(255,255,255,0.5)";ctx.font="11px sans-serif";ctx.fillText(a.desc,x+44,y+35);
+      ctx.fillStyle="#2ECC71";ctx.font="bold 16px sans-serif";ctx.textAlign="right";ctx.fillText("✓",x+cW-14,y+26);ctx.textAlign="left";});
+    const now=new Date();const ds=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,"0")}.${String(now.getDate()).padStart(2,"0")}`;
+    ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="12px monospace";ctx.textAlign="center";ctx.fillText(`달성일: ${ds}`,400,410);
+    ctx.fillStyle="rgba(255,255,255,0.25)";ctx.font="11px sans-serif";ctx.fillText("제작: 조승재(과학이조선생) · chuseonjae@outlook.kr · 배포일자: 2026.03.06",400,430);
+    ctx.fillStyle="#F5A623";ctx.font="18px sans-serif";ctx.fillText("⭐ ⭐ ⭐ ⭐ ⭐ ⭐",400,390);
+    const link=document.createElement("a");link.download=`지구탐험대_${ds}.png`;link.href=c.toDataURL("image/png");link.click();};
+  return <div style={{animation:"fadeUp .4s",maxWidth:480,margin:"0 auto"}}>
+    <div className="bhans" style={{fontSize:20,color:"var(--text)",textAlign:"center",marginBottom:4}}>🏆 업적</div>
+    <div className="noto" style={{fontSize:12,color:"var(--dim)",textAlign:"center",marginBottom:14}}>{unlocked.length} / {ACHIEVEMENTS.length} 달성</div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>{ACHIEVEMENTS.map(a=>{const got=unlocked.includes(a.id);return <div key={a.id} className="card" style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,opacity:got?1:.35,borderColor:got?"rgba(245,166,35,.25)":"var(--border)"}}>
+      <span style={{fontSize:28,filter:got?"none":"grayscale(1)"}}>{a.icon}</span>
+      <div><div className="noto" style={{fontWeight:700,fontSize:14,color:got?"var(--text)":"var(--dim)"}}>{a.name}</div><div className="noto" style={{fontSize:11,color:"var(--dim)"}}>{a.desc}</div></div>
+      {got&&<span style={{marginLeft:"auto",color:"var(--accent)",fontSize:16}}>✓</span>}
+    </div>;})}</div>
+    {allDone&&<button className="btn" onClick={capture} style={{marginTop:16,width:"100%",padding:"12px 0",borderRadius:12,background:"linear-gradient(135deg,var(--accent),var(--accent2))",color:"white",fontSize:16,animation:"glow 2s infinite"}}>📸 업적 인증서 다운로드!</button>}
+  </div>;
+}
+
+/* ═══ MAIN APP ═══ */
+function App(){
+  const[tab,setTab]=useState("explore");const[aL,setAL]=useState(null);const[depth,setDepth]=useState(0);const[drilling,setDrilling]=useState(false);const[speed,setSpeed]=useState(1);const[shaking,setShaking]=useState(false);
+  const[notif,setNotif]=useState("");const[achs,setAchs]=useState([]);const[achBanner,setAchBanner]=useState(null);const[intro,setIntro]=useState(true);const[showInfo,setShowInfo]=useState(false);
+  const dRef=useRef(0);const iRef=useRef(null);const sRef=useRef(new Set());const prevLayerRef=useRef(null);
+
+  const showNotif=useCallback(m=>{setNotif(m);setTimeout(()=>setNotif(""),3000);},[]);
+  const unlock=useCallback(id=>{setAchs(p=>{if(p.includes(id))return p;const a=ACHIEVEMENTS.find(x=>x.id===id);if(a){setAchBanner(a);SFX.achievement();setTimeout(()=>setAchBanner(null),3000);}return[...p,id];});},[]);
+
+  useEffect(()=>{
+    if(drilling){setShaking(true);
+      iRef.current=setInterval(()=>{
+        dRef.current=Math.min(dRef.current+speed*9,DRILL_MAX);
+        setDepth(dRef.current);
+        const cl=getLayerAt(dRef.current);setAL(cl.id);
+        // Layer change sound
+        if(prevLayerRef.current&&prevLayerRef.current!==cl.id){SFX.layerEnter();}
+        prevLayerRef.current=cl.id;
+        // Drill sound every ~500ms
+        if(Math.random()<0.08)SFX.drill();
+        DEPTH_FACTS.forEach(f=>{if(dRef.current>=f.depth&&!sRef.current.has(f.depth)){sRef.current.add(f.depth);showNotif(f.text);}});
+        if(dRef.current>=DRILL_MAX){unlock("earth-explorer");setDrilling(false);setShaking(false);clearInterval(iRef.current);}
+      },50);
+    }else{setShaking(false);}
+    return()=>{if(iRef.current)clearInterval(iRef.current);};
+  },[drilling,speed,showNotif,unlock]);
+
+  const start=async()=>{await SFX.init();setDrilling(true);};
+  const stop=()=>{setDrilling(false);clearInterval(iRef.current);};
+  const reset=()=>{dRef.current=0;setDepth(0);setDrilling(false);sRef.current=new Set();prevLayerRef.current=null;clearInterval(iRef.current);};
+
+  if(intro)return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 50% 80%,#1A1A2E,var(--bg) 70%)",padding:24}}><style>{CSS}</style>
+    <div style={{textAlign:"center",maxWidth:420}}>
+      <div style={{fontSize:96,animation:"float 3s ease-in-out infinite",marginBottom:20,filter:"drop-shadow(0 8px 20px rgba(245,166,35,.3))"}}>🌍</div>
+      <h1 className="bhans" style={{fontSize:34,color:"var(--accent)",marginBottom:8}}>지구 탐험대</h1>
+      <h2 className="noto" style={{fontSize:15,color:"var(--dim)",fontWeight:400,marginBottom:8,lineHeight:1.8}}>업적을 달성해가며 층으로 이루어진<br/>지권에 대해 재밌게 학습할 수 있습니다!</h2>
+      <div className="noto" style={{fontSize:13,color:"rgba(255,255,255,.35)",marginBottom:24,lineHeight:1.6}}>🏆 모든 업적을 달성하면 인증서를 캡처할 수 있어요!</div>
+      <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:28}}>
+        {["⛏️ 시추법","🌋 화산 분출물","🌊 지진파 분석법","📓 탐험노트","🧩 조립","🔬 과학탐정","📝 퀴즈"].map(t=><span key={t} className="noto" style={{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:600,background:"rgba(245,166,35,.1)",border:"1px solid rgba(245,166,35,.2)",color:"var(--accent)"}}>{t}</span>)}
+      </div>
+      <button className="btn" onClick={async()=>{await SFX.init();SFX.click();setIntro(false);}} style={{padding:"14px 56px",borderRadius:14,fontSize:18,background:"linear-gradient(135deg,var(--accent),var(--accent2))",color:"white",boxShadow:"0 8px 36px rgba(245,166,35,.3)",animation:"glow 2s infinite"}}>탐험 시작! 🚀</button>
+      <Footer/>
+    </div></div>;
+
+  const tabs=[
+    {id:"explore",icon:"⛏️",l:"시추법"},{id:"volcano",icon:"🌋",l:"화산 분출물"},
+    {id:"note",icon:"📓",l:"탐험노트"},{id:"seismic",icon:"🌊",l:"지진파 분석법"},
+    {id:"compare",icon:"⚖️",l:"비교"},{id:"assembly",icon:"🧩",l:"조립"},
+    {id:"detective",icon:"🔬",l:"과학탐정"},{id:"quiz",icon:"📝",l:"퀴즈"},
+    {id:"trophy",icon:"🏆",l:`${achs.length}/${ACHIEVEMENTS.length}`},
+  ];
+
+  return <div style={{minHeight:"100vh",padding:"10px 12px 28px",background:"radial-gradient(ellipse at 50% 20%,#141830,var(--bg) 60%)"}}>
+    <style>{CSS}</style><RotatePrompt/>
+    <InfoModal show={showInfo} onClose={()=>setShowInfo(false)}/>
+
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",paddingTop:4,marginBottom:8,position:"relative"}}>
+      <h1 className="bhans" style={{fontSize:20,color:"var(--accent)",margin:0}}>🌍 지구 탐험대</h1>
+      <button className="btn" onClick={()=>{SFX.click();setShowInfo(true);}} style={{position:"absolute",right:4,top:4,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",color:"var(--dim)",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>ℹ️</button>
+    </div>
+
+    {/* Tabs */}
+    <div style={{display:"flex",gap:4,marginBottom:10,justifyContent:"center",overflowX:"auto",paddingBottom:2,WebkitOverflowScrolling:"touch"}}>
+      {tabs.map(t=><button key={t.id} className="btn noto" onClick={()=>{SFX.click();setTab(t.id);}} style={{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:700,whiteSpace:"nowrap",flexShrink:0,border:tab===t.id?"2px solid rgba(245,166,35,.5)":"1px solid var(--border)",background:tab===t.id?"rgba(245,166,35,.1)":"transparent",color:tab===t.id?"var(--accent)":"var(--dim)"}}>{t.icon} {t.l}</button>)}
+    </div>
+
+    <div style={{maxWidth:960,margin:"0 auto"}}>
+      {tab==="explore"&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}}>
+        <div style={{flex:"1 1 260px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+          {/* Concept banner */}
+          <div className="card" style={{padding:12,marginBottom:10,width:"100%",maxWidth:300,borderColor:"rgba(245,166,35,.2)",background:"rgba(245,166,35,.04)"}}>
+            <div className="noto" style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.7,textAlign:"center"}}>
+              <strong style={{color:"var(--accent)"}}>⛏️ 시추법</strong> — 직접 땅을 파서 조사하는 방법<br/>
+              <span style={{fontSize:11,color:"var(--dim)"}}>인류 최대 시추 기록: <strong style={{color:"var(--accent)"}}>약 12km</strong> (콜라 시추공)</span><br/>
+              <span style={{fontSize:11,color:"var(--dim)"}}>여기서는 시추법으로 내핵까지 가보는 가상 체험입니다!</span>
+            </div>
+          </div>
+          <EarthSVG activeLayer={aL} onLayerClick={id=>{SFX.click();setAL(aL===id?null:id);}} drillDepth={depth} shaking={shaking} compact/>
+          {/* Notifications appear BELOW the SVG */}
+          <NotifBar msg={notif}/>
+          {achBanner&&<div style={{textAlign:"center",padding:"8px 20px",margin:"4px auto",background:"linear-gradient(135deg,rgba(15,22,40,.95),rgba(26,32,64,.95))",border:"2px solid var(--accent)",borderRadius:14,animation:"slideDown .4s",display:"flex",alignItems:"center",gap:10,maxWidth:360}}>
+            <span style={{fontSize:28}}>{achBanner.icon}</span>
+            <div style={{textAlign:"left"}}><div className="bhans" style={{fontSize:11,color:"var(--accent)"}}>업적 달성!</div><div className="noto" style={{fontSize:13,color:"var(--text)",fontWeight:700}}>{achBanner.name}</div></div>
+          </div>}
+        </div>
+        <div style={{flex:"1 1 320px",display:"flex",flexDirection:"column",gap:8}}>
+          <DrillPanel depth={depth} drilling={drilling} speed={speed} onStart={start} onStop={stop} onReset={reset} onSpeed={setSpeed}/>
+          <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:350,overflowY:"auto",paddingRight:4}}>
+            {LAYERS.map(l=><LayerCard key={l.id} layer={l} active={aL===l.id} onClick={()=>{SFX.click();setAL(aL===l.id?null:l.id);}}/>)}
+          </div>
+        </div>
+      </div>}
+
+      {tab==="note"&&<ExplorationNote onComplete={unlock}/>}
+      {tab==="volcano"&&<VolcanicTab/>}
+      {tab==="seismic"&&<SeismicTab onComplete={unlock}/>}
+      {tab==="compare"&&<div style={{maxWidth:520,margin:"0 auto"}}><CompareView/></div>}
+      {tab==="assembly"&&<div className="card" style={{padding:18,maxWidth:480,margin:"0 auto"}}><Assembly key="asm" onComplete={unlock}/></div>}
+      {tab==="detective"&&<div className="card" style={{padding:18,maxWidth:500,margin:"0 auto"}}><Detective key={"d"+Date.now()} onComplete={unlock}/></div>}
+      {tab==="quiz"&&<div className="card" style={{padding:18,maxWidth:480,margin:"0 auto"}}><Quiz key={"q"+Date.now()} onComplete={unlock}/></div>}
+      {tab==="trophy"&&<AchievementsView unlocked={achs}/>}
+      <Footer/>
+    </div>
+  </div>;
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById('root'));
+  </script>
+</body>
+</html>
